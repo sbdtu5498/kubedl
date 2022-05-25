@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/openkruise/kruise/apis/apps/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,6 +49,7 @@ import (
 	commonutil "github.com/alibaba/kubedl/pkg/util"
 	"github.com/alibaba/kubedl/pkg/util/k8sutil"
 	patchutil "github.com/alibaba/kubedl/pkg/util/patch"
+	"github.com/alibaba/kubedl/pkg/util/workloadgate"
 )
 
 const (
@@ -188,14 +190,26 @@ func (r *PytorchJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	return c.Watch(&source.Kind{Type: &corev1.Service{}}, &handler.EnqueueRequestForOwner{
+	if err = c.Watch(&source.Kind{Type: &corev1.Service{}}, &handler.EnqueueRequestForOwner{
 		OwnerType:    &training.PyTorchJob{},
 		IsController: true,
 	}, predicate.Funcs{
 		CreateFunc: r.ctrl.OnServiceCreateFunc,
 		UpdateFunc: r.ctrl.OnServiceUpdateFunc,
 		DeleteFunc: r.ctrl.OnServiceDeleteFunc,
-	})
+	}); err != nil {
+		return err
+	}
+
+	if _, enabled := workloadgate.IsWorkloadEnable(&v1alpha1.ContainerRecreateRequest{}, mgr.GetScheme()); enabled {
+		if err = c.Watch(&source.Kind{Type: &v1alpha1.ContainerRecreateRequest{}}, &handler.EnqueueRequestForOwner{
+			OwnerType:    &training.PyTorchJob{},
+			IsController: false,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *PytorchJobReconciler) ControllerName() string {
