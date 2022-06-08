@@ -265,6 +265,9 @@ func (jc *JobController) ReconcilePods(
 		if len(podSlice) > 1 {
 			logger.Warningf("We have too many pods for %s %d", rt, index)
 		} else if len(podSlice) == 0 {
+			if index >= numReplicas {
+				continue
+			}
 			logger.Infof("Need to create new pod: %s-%d", rt, index)
 
 			// check if this replica is the master role
@@ -582,6 +585,9 @@ func (jc *JobController) AdoptAndClaimPods(job metav1.Object, podList *v1.PodLis
 }
 
 func (jc *JobController) reactForAIMasterErrorAnalyzeResult(job client.Object, rtype apiv1.ReplicaType, pods []*v1.Pod, jobStatus *apiv1.JobStatus, logger *log.Entry) (err error) {
+	if rtype == apiv1.JobReplicaTypeAIMaster {
+		return nil
+	}
 	restartList := getToBeRestartedPods(job)
 	if len(restartList) > 0 {
 		logger.Infof("job %s asks to recreate pods: %+v", job.GetName(), restartList)
